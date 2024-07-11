@@ -11,30 +11,37 @@ namespace TcpServer
         public enum Opcode // : byte
         {
             C_Login = 0,
-            C_Create_Room = 1,
-            C_Join_Room = 2,
-            C_Search_Room = 3,
-            C_Ready = 4,
-            C_Start = 5,
-            C_Room_List = 6,
-            C_Room_Entry = 7,
-            C_Matching = 8,
-            C_Cancle_Matching = 9,
 
-            SendMessage = 10,
+            C_UserInfo = 1,
 
-            C_UserInfo = 14,
+            C_Create_Room = 10,
+            C_Join_Room = 11,
+            C_Search_Room = 12,
+            C_Enter_Room = 13,
+            C_Leave_Room = 14,
+            C_Room_List = 15,
 
-            C_TicTacToe = 20,
+            C_Ready = 21,
+            C_Start = 22,
+            C_Ready_Cancel = 23,
+
+            C_Matching = 30,
+            C_Cancel_Matching = 31,
+
+            C_TicTacToe = 40,
 
             C_Ping = 50,
             C_Pong = 51,
+
+            SendMessage = 100,
         }
 
         public class Packet
         {
             public Opcode opcode;
             public string message;
+            public long timestamp;
+            public long ping;
         }
 
         public class UserInfo
@@ -43,10 +50,12 @@ namespace TcpServer
             public TcpClient tcpClient { get; set; }
 
             public string name { get; set; }
-            public RoomInfo currentRoom { get; set; }
-
             // 연결된 번호
             public int connectNumber { get; set; }
+            public bool isReady { get; set; }
+            public bool isMatching { get; set; }
+            public bool hasPonged = true; // 초기 상태는 true
+            public long pingTimestamp { get; set; }
         }
 
         public class RoomInfo : Packet
@@ -91,6 +100,15 @@ namespace TcpServer
             {
                 isPlaying = false;
             }
+
+            public bool AllUsersReady()
+            {
+                foreach (var user in users)
+                {
+                    if (!user.isReady) return false;
+                }
+                return true;
+            }
         }
 
         public class RoomManager
@@ -127,6 +145,8 @@ namespace TcpServer
             {
                 return new List<RoomInfo>(rooms.Values);
             }
+
+
         }
 
         public class RequestGame : Packet
@@ -155,6 +175,35 @@ namespace TcpServer
         public class RequestUserInfo : Packet
         {
             public UserInfo userInfo { get; set; }
+        }
+
+        public class RequestReady : Packet
+        {
+            public int roomNumber { get; set; }
+            public int player { get; set; } // 플레이어 번호 추가
+        }
+
+        public class SearchRoom : Packet
+        {
+            public int roomNumber { get; set; }
+            public bool existRoom { get; set; }
+            public RoomInfo roominfo { get; set; }
+        }
+
+        public class CancelMatching : Packet
+        {
+            public bool isCancel { get; set; }
+        }
+
+        public class LeaveRoom : Packet
+        {
+            public UserInfo userInfo { get; set; }
+            public RoomInfo roominfo { get; set; }
+        }
+
+        public class EnterRoom : Packet
+        {
+            public RoomInfo roominfo { get; set; }
         }
     }
 }
