@@ -52,9 +52,9 @@ namespace TcpServer
             public string name { get; set; }
             // 연결된 번호
             public int connectNumber { get; set; }
-            public bool isReady { get; set; }
-            public bool isMatching { get; set; }
-            public bool hasPonged = true; // 초기 상태는 true
+            public bool isReady { get; set; } = false;
+            public bool isMatching { get; set; } = false;
+            public bool hasPonged { get; set; } = true; // 초기 상태는 true
             public long pingTimestamp { get; set; }
         }
 
@@ -62,7 +62,7 @@ namespace TcpServer
         {
             public int roomNumber { get; set; }
             public List<UserInfo> users { get; set; }
-            public bool isPlaying { get; set; }
+            public bool isPlaying { get; set; } = false;
             public int[] board { get; set; } // 보드 상태 저장
             public Queue<int> playerSelectQueue { get; set; }
 

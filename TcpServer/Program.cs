@@ -17,7 +17,9 @@ namespace TcpServer
         private static RoomManager roomManager = new RoomManager();
 
         private static readonly List<UserInfo> waitingClients = new List<UserInfo>();
-        private static readonly object lockObj = new object();
+        private static readonly object waitingClientsLockObj = new object();
+        private static readonly object roomManagerLockObj = new object();
+        private static readonly object clientLockObj = new object();
 
         // 연결 유무 확인할수있나
         private static async Task Main(string[] _args)
@@ -37,8 +39,10 @@ namespace TcpServer
                 UserInfo user = new UserInfo();
                 user.tcpClient = client;
                 user.connectNumber = connectNumber;
-
-                clients[connectNumber] = user;
+                lock (clientLockObj)
+                {
+                    clients[connectNumber] = user;
+                }
                 connectNumber++;
 
                 // 각 클라이언트 연결을 처리하는 작업을 시작합니다.
@@ -119,7 +123,10 @@ namespace TcpServer
             {
                 // 클라이언트 연결을 종료합니다.
                 _userInfo.tcpClient.Close();
-                clients.Remove(_userInfo.connectNumber);
+                lock (clientLockObj)
+                {
+                    clients.Remove(_userInfo.connectNumber);
+                }
             }
         }
 
@@ -164,6 +171,18 @@ namespace TcpServer
             Console.WriteLine($"받은 메시지: {result.opcode}");
 
             var room = roomManager.GetRoom(result.roomNumber);
+
+            lock (roomManagerLockObj)
+            {
+                foreach (var user in room.users)
+                {
+                    if (user.connectNumber == _userInfo.connectNumber)
+                    {
+                        user.isReady = _userInfo.isReady;
+                    }
+                }
+            }
+
             if (room != null && room.AllUsersReady())
             {
                 var startPacket = new Packet { opcode = Opcode.C_Start };
@@ -189,7 +208,7 @@ namespace TcpServer
 
         private static async Task HandleMatchingAsync(UserInfo _userInfo, string _request)
         {
-            lock (lockObj) // lock 문으로 대기 중인 클라이언트 목록에 대한 동시 접근 제어
+            lock (waitingClientsLockObj) // lock 문으로 대기 중인 클라이언트 목록에 대한 동시 접근 제어
             {
                 waitingClients.Add(_userInfo);
             }
@@ -197,7 +216,7 @@ namespace TcpServer
             if (waitingClients.Count >= 2)
             {
                 UserInfo user1, user2;
-                lock (lockObj) // lock 문으로 대기 중인 클라이언트 목록에서 클라이언트 2개를 꺼냄
+                lock (waitingClientsLockObj) // lock 문으로 대기 중인 클라이언트 목록에서 클라이언트 2개를 꺼냄
                 {
                     user1 = waitingClients[0];
                     user2 = waitingClients[1];
@@ -209,11 +228,15 @@ namespace TcpServer
                     user2.isMatching = true;
                 }
 
-                var room = roomManager.CreateRoom();
-                room.AddUser(user1);
-                room.AddUser(user2);
+                RoomInfo room;
 
-                room.opcode = Opcode.C_Matching;
+                lock (roomManagerLockObj)
+                {
+                    room = roomManager.CreateRoom();
+                    room.AddUser(user1);
+                    room.AddUser(user2);
+                    room.opcode = Opcode.C_Matching;
+                }
 
                 var convert = JsonConvert.SerializeObject(room);
 
@@ -277,7 +300,10 @@ namespace TcpServer
 
             if (winner != -1)
             {
-                roomManager.RemoveRoom(result.roomNumber);
+                lock (roomManagerLockObj)
+                {
+                    roomManager.RemoveRoom(result.roomNumber);
+                }
             }
         }
 
@@ -324,13 +350,6 @@ namespace TcpServer
             return -1; // 승리한 플레이어가 없으면 -1 반환
         }
 
-        private static async Task HandlePingAsync(UserInfo _userInfo, string _request)
-        {
-            // 클라이언트에서 받은 Ping 메시지에 대한 Pong 응답을 보냅니다.
-            var pongResponse = new Packet { opcode = Opcode.C_Pong };
-            var responseJson = JsonConvert.SerializeObject(pongResponse);
-            await SendResponseAsync(_userInfo, responseJson);
-        }
 
         //private static async Task HandleReadyCancelAsync(UserInfo _userInfo, string _request)
         //{
@@ -341,6 +360,16 @@ namespace TcpServer
         //    var result = JsonConvert.DeserializeObject<RequestReady>(_request);
         //    Console.WriteLine($"받은 메시지: {result.opcode}");
 
+        //         lock (roomManagerLockObj)
+        //            {
+        //                foreach (var user in room.users)
+        //                {
+        //                    if (user.connectNumber == _userInfo.connectNumber)
+        //                    {
+        //                        user.isReady = _userInfo.isReady;
+        //                    }
+        //}
+        //            }
         //    var startPacket = new Packet { opcode = Opcode.C_Ready_Cancel };
         //    var responseJson = JsonConvert.SerializeObject(startPacket);
         //    byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson);
@@ -351,10 +380,15 @@ namespace TcpServer
 
         private static async Task HandleCreateRoomAsync(UserInfo _userInfo, string _request)
         {
-            var room = roomManager.CreateRoom();
+            RoomInfo room;
 
-            room.opcode = Opcode.C_Create_Room;
-            room.AddUser(_userInfo);
+            lock (roomManagerLockObj)
+            {
+                room = roomManager.CreateRoom();
+
+                room.opcode = Opcode.C_Create_Room;
+                room.AddUser(_userInfo);
+            }
 
             var convert = JsonConvert.SerializeObject(room);
             await SendResponseAsync(_userInfo, convert);
@@ -386,7 +420,7 @@ namespace TcpServer
             var room = roomManager.GetRoom(result.roominfo.roomNumber);
 
             UserInfo opponentUser = null;
-            lock (lockObj)
+            lock (roomManagerLockObj)
             {
                 room.RemoveUser(_userInfo);
 
@@ -436,7 +470,7 @@ namespace TcpServer
             CancelMatching cancelMatching = new CancelMatching();
             cancelMatching.opcode = Opcode.C_Cancel_Matching;
 
-            lock (lockObj)
+            lock (waitingClientsLockObj)
             {
                 if (!_userInfo.isMatching) // 매칭 진행 중이 아닌 경우에만 매칭 취소
                 {
@@ -482,6 +516,10 @@ namespace TcpServer
                 {
                     Console.WriteLine("클라이언트가 응답하지 않아 연결을 종료합니다.");
                     _userInfo.tcpClient.Close();
+                    lock (clientLockObj)
+                    {
+                        clients.Remove(_userInfo.connectNumber);
+                    }
                     break;
                 }
                 _userInfo.hasPonged = false; // 퐁 응답 초기화
