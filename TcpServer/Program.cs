@@ -32,7 +32,6 @@ namespace TcpServer
 
             while (true)
             {
-                // 클라이언트의 연결을 비동기적으로 기다립니다.
                 TcpClient client = await listener.AcceptTcpClientAsync();
                 Console.WriteLine("클라이언트가 연결되었습니다.");
 
@@ -93,9 +92,7 @@ namespace TcpServer
                             await HandleReadyAsync(_userInfo, request);
                             break;
                         case Opcode.C_Ready_Cancel:
-                            // await HandleReadyCancleAsync(_userInfo, request);
-                            _userInfo.isReady = false;
-                            // roommanager에서 가져와서 바꿔줘야하는지 테스트 해봐야함
+                            await HandleReadyCancelAsync(_userInfo, request);
                             break;
                         case Opcode.C_Matching:
                             await HandleMatchingAsync(_userInfo, request);
@@ -130,36 +127,20 @@ namespace TcpServer
             }
         }
 
-        #region oldCode
         private static Task HandleLoginAsync(UserInfo _userInfo, string _request)
         {
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 로그인: {_request}");
-            return Task.CompletedTask; // 비동기 작업이 없으므로 CompletedTask 반환
+            return Task.CompletedTask;
         }
 
         private static async Task HandleJoinRoomAsync(UserInfo _userInfo, string _request)
         {
-            // 정보받아서
-            var result = JsonConvert.DeserializeObject<Packet>(_request);
-            Console.WriteLine($"받은 메시지: {result.opcode}");
-
-            var convert = JsonConvert.SerializeObject(result);
-            await SendResponseAsync(_userInfo, convert);
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 방 확인: {_request}");
+            await Task.CompletedTask;
         }
 
         private static async Task HandleSendMessageAsync(UserInfo _userInfo, string _request)
         {
-            // 정보받아서
-            var result = JsonConvert.DeserializeObject<Packet>(_request);
-            Console.WriteLine($"받은 메시지: {result.opcode}");
-
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 메시지 전송: {_request}");
-            string response = $"서버 응답: {_request}";
-            byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-            await _userInfo.tcpClient.GetStream().WriteAsync(responseBytes, 0, responseBytes.Length);
+            await Task.CompletedTask;
         }
-        #endregion
 
         private static async Task HandleReadyAsync(UserInfo _userInfo, string _request)
         {
@@ -351,32 +332,33 @@ namespace TcpServer
         }
 
 
-        //private static async Task HandleReadyCancelAsync(UserInfo _userInfo, string _request)
-        //{
-        //    _userInfo.isReady = false;
-        //    Console.WriteLine($"사용자 {_userInfo.connectNumber} 레디 상태");
+        private static async Task HandleReadyCancelAsync(UserInfo _userInfo, string _request)
+        {
+            _userInfo.isReady = false;
+            Console.WriteLine($"사용자 {_userInfo.connectNumber} 레디 상태");
 
-        //    // 정보받아서
-        //    var result = JsonConvert.DeserializeObject<RequestReady>(_request);
-        //    Console.WriteLine($"받은 메시지: {result.opcode}");
+            // 정보받아서
+            var result = JsonConvert.DeserializeObject<RequestReady>(_request);
+            Console.WriteLine($"받은 메시지: {result.opcode}");
 
-        //         lock (roomManagerLockObj)
-        //            {
-        //                foreach (var user in room.users)
-        //                {
-        //                    if (user.connectNumber == _userInfo.connectNumber)
-        //                    {
-        //                        user.isReady = _userInfo.isReady;
-        //                    }
-        //}
-        //            }
-        //    var startPacket = new Packet { opcode = Opcode.C_Ready_Cancel };
-        //    var responseJson = JsonConvert.SerializeObject(startPacket);
-        //    byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson);
+            var room = roomManager.GetRoom(result.roomNumber);
 
-        //await SendResponseAsync(_userInfo, convert);
-        //    await _userInfo.tcpClient.GetStream().WriteAsync(responseBytes, 0, responseBytes.Length);
-        //}
+            lock (roomManagerLockObj)
+            {
+                foreach (var user in room.users)
+                {
+                    if (user.connectNumber == _userInfo.connectNumber)
+                    {
+                        user.isReady = _userInfo.isReady;
+                    }
+                }
+            }
+
+            var readyCanelPacket = new Packet { opcode = Opcode.C_Ready_Cancel };
+            var convert = JsonConvert.SerializeObject(readyCanelPacket);
+
+            await SendResponseAsync(_userInfo, convert);
+        }
 
         private static async Task HandleCreateRoomAsync(UserInfo _userInfo, string _request)
         {
