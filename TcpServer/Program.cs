@@ -21,19 +21,14 @@ namespace TcpServer
         private static readonly object roomManagerLockObj = new object();
         private static readonly object clientLockObj = new object();
 
-        // 연결 유무 확인할수있나
         private static async Task Main(string[] _args)
         {
-            // TCP 리스너를 설정합니다. IP 주소와 포트를 지정합니다.
-            // 5000은 임의의 포트
             TcpListener listener = new TcpListener(IPAddress.Any, 5000);
             listener.Start();
-            Console.WriteLine("TCP 서버가 시작되었습니다. 클라이언트를 기다리는 중...");
 
             while (true)
             {
                 TcpClient client = await listener.AcceptTcpClientAsync();
-                Console.WriteLine("클라이언트가 연결되었습니다.");
 
                 UserInfo user = new UserInfo();
                 user.tcpClient = client;
@@ -44,14 +39,12 @@ namespace TcpServer
                 }
                 connectNumber++;
 
-                // 각 클라이언트 연결을 처리하는 작업을 시작합니다.
                 _ = HandleClientAsync(user);
             }
         }
 
         private static async Task HandleClientAsync(UserInfo _userInfo)
         {
-            // 네트워크 스트림을 통해 데이터 읽기와 쓰기를 처리합니다.
             NetworkStream stream = _userInfo.tcpClient.GetStream();
             byte[] buffer = new byte[1024];
             int byteCount;
@@ -63,10 +56,7 @@ namespace TcpServer
                 while ((byteCount = await stream.ReadAsync(buffer, 0, buffer.Length)) != 0)
                 {
                     string request = Encoding.UTF8.GetString(buffer, 0, byteCount);
-                    Console.WriteLine($"받은 메시지: {request}");
-
                     var result = JsonConvert.DeserializeObject<Packet>(request);
-                    Console.WriteLine($"받은 메시지: {result.opcode}");
 
                     switch (result.opcode)
                     {
@@ -107,7 +97,7 @@ namespace TcpServer
                             HandlePong(_userInfo, request);
                             break;
                         default:
-                            Console.WriteLine("알 수 없는 Opcode입니다.");
+                            Console.WriteLine("알 수 없는 Opcode");
                             break;
                     }
                 }
@@ -118,7 +108,6 @@ namespace TcpServer
             }
             finally
             {
-                // 클라이언트 연결을 종료합니다.
                 _userInfo.tcpClient.Close();
                 lock (clientLockObj)
                 {
@@ -127,29 +116,11 @@ namespace TcpServer
             }
         }
 
-        private static Task HandleLoginAsync(UserInfo _userInfo, string _request)
-        {
-            return Task.CompletedTask;
-        }
-
-        private static async Task HandleJoinRoomAsync(UserInfo _userInfo, string _request)
-        {
-            await Task.CompletedTask;
-        }
-
-        private static async Task HandleSendMessageAsync(UserInfo _userInfo, string _request)
-        {
-            await Task.CompletedTask;
-        }
-
         private static async Task HandleReadyAsync(UserInfo _userInfo, string _request)
         {
             _userInfo.isReady = true;
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 레디 상태");
 
-            // 정보받아서
             var result = JsonConvert.DeserializeObject<RequestReady>(_request);
-            Console.WriteLine($"받은 메시지: {result.opcode}");
 
             var room = roomManager.GetRoom(result.roomNumber);
 
@@ -173,7 +144,6 @@ namespace TcpServer
                 {
                     await SendResponseAsync(user, convert);
                 }
-                Console.WriteLine("모든 사용자가 레디 상태입니다. 게임을 시작합니다.");
             }
         }
 
@@ -183,13 +153,13 @@ namespace TcpServer
             requestRoomList.opcode = Opcode.C_Room_List;
             requestRoomList.roomList = roomManager.GetRoomList();
             var convert = JsonConvert.SerializeObject(requestRoomList);
+
             await SendResponseAsync(_userInfo, convert);
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 방 목록 요청: {_request}");
         }
 
         private static async Task HandleMatchingAsync(UserInfo _userInfo, string _request)
         {
-            lock (waitingClientsLockObj) // lock 문으로 대기 중인 클라이언트 목록에 대한 동시 접근 제어
+            lock (waitingClientsLockObj)
             {
                 waitingClients.Add(_userInfo);
             }
@@ -197,14 +167,13 @@ namespace TcpServer
             if (waitingClients.Count >= 2)
             {
                 UserInfo user1, user2;
-                lock (waitingClientsLockObj) // lock 문으로 대기 중인 클라이언트 목록에서 클라이언트 2개를 꺼냄
+                lock (waitingClientsLockObj)
                 {
                     user1 = waitingClients[0];
                     user2 = waitingClients[1];
                     waitingClients.RemoveAt(0);
                     waitingClients.RemoveAt(0);
 
-                    // 매칭 진행 상태로 설정
                     user1.isMatching = true;
                     user2.isMatching = true;
                 }
@@ -226,22 +195,18 @@ namespace TcpServer
                     await SendResponseAsync(user, convert);
                 }
 
-                // 매칭 완료 후 매칭 상태 해제
                 user1.isMatching = false;
                 user2.isMatching = false;
             }
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 방 입장 대기");
         }
 
         private static async Task HandleTicTacToeAsync(UserInfo _userInfo, string _request)
         {
-            // 정보받아서
             var result = JsonConvert.DeserializeObject<RequestGame>(_request);
-            Console.WriteLine($"받은 메시지: {result.opcode}");
 
             var room = roomManager.GetRoom(result.roomNumber);
 
-            room.board[result.index] = result.player; // 보드 상태 업데이트
+            room.board[result.index] = result.player;
             room.playerSelectQueue.Enqueue(result.index);
 
 
@@ -255,7 +220,6 @@ namespace TcpServer
                 delete = false
             };
 
-            // 승리조건 검사
             int winner = CheckWin(room.board);
             if (winner != -1)
             {
@@ -308,14 +272,14 @@ namespace TcpServer
         {
             int[][] winPatterns = new int[][]
             {
-                new int[] { 0, 1, 2 }, // 첫 번째 행
-                new int[] { 3, 4, 5 }, // 두 번째 행
-                new int[] { 6, 7, 8 }, // 세 번째 행
-                new int[] { 0, 3, 6 }, // 첫 번째 열
-                new int[] { 1, 4, 7 }, // 두 번째 열
-                new int[] { 2, 5, 8 }, // 세 번째 열
-                new int[] { 0, 4, 8 }, // 대각선 \
-                new int[] { 2, 4, 6 }  // 대각선 /
+                new int[] { 0, 1, 2 },
+                new int[] { 3, 4, 5 },
+                new int[] { 6, 7, 8 },
+                new int[] { 0, 3, 6 },
+                new int[] { 1, 4, 7 },
+                new int[] { 2, 5, 8 },
+                new int[] { 0, 4, 8 },
+                new int[] { 2, 4, 6 }
             };
 
             foreach (var pattern in winPatterns)
@@ -324,20 +288,18 @@ namespace TcpServer
                     board[pattern[0]] == board[pattern[1]] &&
                     board[pattern[1]] == board[pattern[2]])
                 {
-                    return board[pattern[0]]; // 승리한 플레이어 반환
+                    return board[pattern[0]];
                 }
             }
 
-            return -1; // 승리한 플레이어가 없으면 -1 반환
+            return -1;
         }
 
 
         private static async Task HandleReadyCancelAsync(UserInfo _userInfo, string _request)
         {
             _userInfo.isReady = false;
-            Console.WriteLine($"사용자 {_userInfo.connectNumber} 레디 상태");
 
-            // 정보받아서
             var result = JsonConvert.DeserializeObject<RequestReady>(_request);
             Console.WriteLine($"받은 메시지: {result.opcode}");
 
@@ -378,7 +340,6 @@ namespace TcpServer
 
         private static async Task HandleEnterRoomAsync(UserInfo _userInfo, string _request)
         {
-            // 정보받아서
             var result = JsonConvert.DeserializeObject<EnterRoom>(_request);
             Console.WriteLine($"받은 메시지: {result.opcode}");
 
@@ -397,7 +358,6 @@ namespace TcpServer
         private static async Task HandleLeaveRoomAsync(UserInfo _userInfo, string _request)
         {
             var result = JsonConvert.DeserializeObject<LeaveRoom>(_request);
-            Console.WriteLine($"받은 메시지: {result.opcode}");
 
             var room = roomManager.GetRoom(result.roominfo.roomNumber);
 
@@ -454,16 +414,14 @@ namespace TcpServer
 
             lock (waitingClientsLockObj)
             {
-                if (!_userInfo.isMatching) // 매칭 진행 중이 아닌 경우에만 매칭 취소
+                if (!_userInfo.isMatching)
                 {
                     waitingClients.Remove(_userInfo);
                     cancelMatching.isCancel = true;
-                    Console.WriteLine($"사용자 {_userInfo.connectNumber} 매칭 취소");
                 }
                 else
                 {
                     cancelMatching.isCancel = false;
-                    Console.WriteLine($"사용자 {_userInfo.connectNumber}는 이미 매칭 중입니다.");
                 }
             }
 
@@ -474,7 +432,6 @@ namespace TcpServer
         private static void HandlePong(UserInfo _userInfo, string _request)
         {
             _userInfo.hasPonged = true;
-            Console.WriteLine($"핑: {_userInfo.pingTimestamp} ms");
         }
 
         private static async Task SendPingAsync(UserInfo _userInfo)
@@ -489,14 +446,11 @@ namespace TcpServer
                 var convert = JsonConvert.SerializeObject(pingPacket);
                 await SendResponseAsync(_userInfo, convert);
 
-                // 핑 메시지 보낸 후 일정 시간 대기
                 await Task.Delay(TimeSpan.FromSeconds(10));
 
-                // 퐁 메시지를 기다리기 위한 타임아웃
                 await Task.Delay(TimeSpan.FromSeconds(5));
                 if (!_userInfo.hasPonged)
                 {
-                    Console.WriteLine("클라이언트가 응답하지 않아 연결을 종료합니다.");
                     _userInfo.tcpClient.Close();
                     lock (clientLockObj)
                     {
@@ -504,7 +458,7 @@ namespace TcpServer
                     }
                     break;
                 }
-                _userInfo.hasPonged = false; // 퐁 응답 초기화
+                _userInfo.hasPonged = false;
             }
         }
 

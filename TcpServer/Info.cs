@@ -63,7 +63,7 @@ namespace TcpServer
             public int roomNumber { get; set; }
             public List<UserInfo> users { get; set; }
             public bool isPlaying { get; set; } = false;
-            public int[] board { get; set; } // 보드 상태 저장
+            public int[] board { get; set; }
             public Queue<int> playerSelectQueue { get; set; }
 
             public RoomInfo(int _roomNumber)
@@ -73,11 +73,11 @@ namespace TcpServer
                 isPlaying = false;
                 playerSelectQueue = new Queue<int>();
 
-                int count = 9; // 틱택토 보드는 3x3 크기
+                int count = 9;
                 board = new int[count];
                 for (int i = 0; i < count; i++)
                 {
-                    board[i] = -1; // 빈 칸은 -1로 초기화
+                    board[i] = -1;
                 }
             }
 
@@ -153,18 +153,18 @@ namespace TcpServer
         {
             public int roomNumber { get; set; }
             public int index { get; set; }
-            public int player { get; set; } // 플레이어 번호 추가
+            public int player { get; set; }
         }
 
         public class ResponseGame : Packet
         {
             public int roomNumber { get; set; }
             public int index { get; set; }
-            public int player { get; set; } // 플레이어 번호 추가
+            public int player { get; set; }
             public bool playing { get; set; }
-            public int winner { get; set; } = -1; // 초기값 -1로 설정
+            public int winner { get; set; } = -1;
             public bool delete { get; set; }
-            public int deleteIndex { get; set; } = -1; // 초기값 -1로 설정
+            public int deleteIndex { get; set; } = -1;
         }
 
         public class RequestRoomList : Packet
@@ -180,7 +180,7 @@ namespace TcpServer
         public class RequestReady : Packet
         {
             public int roomNumber { get; set; }
-            public int player { get; set; } // 플레이어 번호 추가
+            public int player { get; set; }
         }
 
         public class SearchRoom : Packet
